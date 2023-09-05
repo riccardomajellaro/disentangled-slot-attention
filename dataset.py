@@ -2,8 +2,6 @@ from torchvision.transforms import functional as F
 from torch.utils.data import Dataset
 from torchvision import transforms
 from natsort import natsorted
-from PIL import Image
-from scipy import io
 import numpy as np
 import torch
 import os

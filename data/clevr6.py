@@ -1,12 +1,17 @@
 # THIS SCRIPT MUST BE RUN ONLY AFTER clevr.py IN ORDER TO FILTER IT
 
+from os.path import exists
 from os.path import join
+from os import makedirs
 import numpy as np
 import argparse
 import os
 
 
 def main(clevr_path, clevr6_path):
+    if not exists(clevr6_path):
+        makedirs(clevr6_path)
+    
     for split in ["train", "test"]:
         for m in os.listdir(join(clevr_path, split, "masks")):
             masks = np.load(join(clevr_path, split, "masks", m), allow_pickle=True)

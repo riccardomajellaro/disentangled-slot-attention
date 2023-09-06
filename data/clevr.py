@@ -1,3 +1,6 @@
+""" Adapted from https://github.com/deepmind/multi_object_datasets.
+"""
+
 from os.path import exists
 from os.path import join
 from os import makedirs
@@ -81,17 +84,17 @@ def _decode(example_proto):
 
 
 def dataset(tfrecords_path, read_buffer_size=None, map_parallel_calls=None):
-    """Read, decompress, and parse the TFRecords file.
+    """ Read, decompress, and parse the TFRecords file.
 
-    Args:
-        tfrecords_path: str. Path to the dataset file.
-        read_buffer_size: int. Number of bytes in the read buffer. See documentation
-        for `tf.data.TFRecordDataset.__init__`.
-        map_parallel_calls: int. Number of elements decoded asynchronously in
-        parallel. See documentation for `tf.data.Dataset.map`.
+        Args:
+            tfrecords_path: str. Path to the dataset file.
+            read_buffer_size: int. Number of bytes in the read buffer. See documentation
+            for `tf.data.TFRecordDataset.__init__`.
+            map_parallel_calls: int. Number of elements decoded asynchronously in
+            parallel. See documentation for `tf.data.Dataset.map`.
 
-    Returns:
-        An unbatched `tf.data.TFRecordDataset`.
+        Returns:
+            An unbatched `tf.data.TFRecordDataset`.
     """
     raw_dataset = tf.data.TFRecordDataset(
         tfrecords_path, compression_type=tf.io.TFRecordOptions.get_compression_type_string('GZIP'),

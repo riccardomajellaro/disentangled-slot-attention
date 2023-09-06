@@ -1,3 +1,6 @@
+""" Adapted from https://github.com/deepmind/multi_object_datasets.
+"""
+
 from os.path import exists
 from os.path import join
 from os import makedirs

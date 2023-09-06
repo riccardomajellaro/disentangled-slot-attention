@@ -13,6 +13,11 @@ def main(clevr_path, clevr6_path):
         makedirs(clevr6_path)
     
     for split in ["train", "test"]:
+        if not exists(join(clevr6_path, split, "images")):
+            makedirs(join(clevr6_path, split, "images"))
+        if not exists(join(clevr6_path, split, "masks")):
+            makedirs(join(clevr6_path, split, "masks"))
+
         for m in os.listdir(join(clevr_path, split, "masks")):
             masks = np.load(join(clevr_path, split, "masks", m), allow_pickle=True)
             if np.sum(masks.sum((1,2,3))>0) <= 7:

@@ -395,8 +395,7 @@ class DISA(nn.Module):
         # combine texture values according to attn mask from SA module (then process with residual MLP)
         slots_texture = torch.einsum('bijd,bij->bid', v_texture, attn_mask / attn_mask.sum(dim=-1, keepdim=True))
         del v_texture
-        slots_texture = slots_texture + \
-                self.fc2_slots_texture(F.relu(self.fc1_slots_texture(self.norm_pre_fc_slots_texture(slots_texture))))
+        slots_texture = self.fc2_slots_texture(F.relu(self.fc1_slots_texture(self.norm_pre_fc_slots_texture(slots_texture))))
 
         # combine slots_texture and slots_mask into single representations
         slots = torch.concat([slots_texture, slots_mask], dim=-1)

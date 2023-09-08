@@ -121,7 +121,7 @@ def train(gpu, args):
             if args["model"] == "sa":
                 reconstruction, _, _, _, _ = model(image)
             else:
-                reconstruction, _, _, _, _, _ = model(image, slots_noise=slots_noise)
+                reconstruction, _, _, slots, _, _ = model(image, slots_noise=slots_noise)
             del _
 
             loss = criterion(reconstruction, image)
@@ -129,6 +129,9 @@ def train(gpu, args):
                 wandb.log({"rec_loss": loss}, step=i)
             
             del reconstruction
+
+            if args["var_reg"] is not None:
+                loss = loss + args["var_reg"] * slots[:, :, :args["slots_dim"]].view(-1, args["slots_dim"]).var(0).sum()
 
             optimizer.zero_grad()
             loss.backward()
@@ -164,41 +167,42 @@ def cleanup():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--config', default=None, type=str, help='name of the configuration to use')
-    parser.add_argument('--model', default="sobel", type=str, help='name of the model to use (disa, sa)')
+    parser.add_argument('--config', default=None, type=str, help='Name of the configuration to load.')
+    parser.add_argument('--model', default="disa", type=str, help='Name of the model to use (disa, sa, isa).')
     parser.add_argument('--no_wandb', action='store_true')
-    parser.add_argument('--init_ckpt', default=None, type=str, help='initial weights to start training')
-    parser.add_argument('--ckpt_path', default='checkpoints/tetrominoes/', type=str, help='where to save models')
-    parser.add_argument('--ckpt_name', default='model', type=str, help='name of the run')
-    parser.add_argument('--data_path', default='tetrominoes/', type=str, help='Path to the data')
+    parser.add_argument('--init_ckpt', default=None, type=str, help='Name of the checkpoint to load (without .ckpt).')
+    parser.add_argument('--ckpt_path', default='checkpoints/tetrominoes/', type=str, help='Path where you want to save the model.')
+    parser.add_argument('--ckpt_name', default='model', type=str, help='Name of the saved checkpoint. Set to --config if --config is not None.')
+    parser.add_argument('--data_path', default='tetrominoes/', type=str, help='Path to the data.')
     parser.add_argument('--resolution', default=[35, 35], type=list)
     parser.add_argument('--batch_size', default=64, type=int)
+    parser.add_argument('--var_reg', default=0.01, help='Strength of the variance regularization term. Set to None to turn it off.')
     parser.add_argument('--noise', action='store_true')
     parser.add_argument('--crop', action='store_true')
     parser.add_argument('--resize', action='store_true')
-    parser.add_argument('--small_arch', action='store_true', help='if true set the encoder/decoder dim to 32, 64 otherwise')
+    parser.add_argument('--small_arch', action='store_true', help='Whether or not to use the small model.')
     parser.add_argument('--learned_slots', action='store_true')
     parser.add_argument('--bilevel', action='store_true')
     parser.add_argument('--slots_noise', action='store_true')
     parser.add_argument('--learned_factors', action='store_true')
     parser.add_argument('--scale_inv', action='store_true')
-    parser.add_argument('--num_slots', default=4, type=int, help='Number of slots in Slot Attention')
-    parser.add_argument('--num_iterations', default=3, type=int, help='Number of attention iterations')
-    parser.add_argument('--slots_dim', default=32, type=int, help='slots dimensions')
+    parser.add_argument('--num_slots', default=4, type=int, help='Number of object slots.')
+    parser.add_argument('--num_iterations', default=3, type=int, help='Number of attention iterations.')
+    parser.add_argument('--slots_dim', default=32, type=int, help='Dimension of the slots.')
     parser.add_argument('--learning_rate', default=0.0004, type=float)
     parser.add_argument('--warmup_steps', default=10000, type=int, help='Number of warmup steps for the learning rate.')
     parser.add_argument('--decay_rate', default=0.5, type=float, help='Rate for the learning rate decay.')
     parser.add_argument('--decay_steps', default=100000, type=int, help='Number of steps for the learning rate decay.')
-    parser.add_argument('--num_workers', default=0, type=int, help='number of workers for loading data')
-    parser.add_argument('--num_epochs', default=100, type=int, help='number of epochs')
-    parser.add_argument('--num_gpus', default=1, type=int, help='number of gpus')
+    parser.add_argument('--num_workers', default=0, type=int, help='Number of workers for loading data.')
+    parser.add_argument('--num_epochs', default=100, type=int, help='Number of epochs.')
+    parser.add_argument('--num_gpus', default=2, type=int, help='number of gpus')
 
     args = parser.parse_args()
     args = vars(args)
 
     if args["config"] is not None:
         args["ckpt_name"] = args["config"]
-        with open("objdisc_configs.json", "r") as config_file:
+        with open("configs/objdisc_configs.json", "r") as config_file:
             configs = json.load(config_file)[args["config"]]
         for key, value in configs.items():
             try:

@@ -392,7 +392,7 @@ class DISA(nn.Module):
         v_texture = v_texture.unsqueeze(1).repeat((1, num_slots, 1, 1, 1))
         v_texture = self.enc_pos_emb(v_texture, s_pos, s_scale).view(*v_texture.shape[:2], -1, v_texture.shape[-1])
         v_texture = self.fc2(F.relu(self.fc1(self.norm_pre_fc(v_texture))))
-        # combine texture values according to attn mask from SA module (then process with residual MLP)
+        # combine texture values according to attn mask from SA module (then process with MLP)
         slots_texture = torch.einsum('bijd,bij->bid', v_texture, attn_mask / attn_mask.sum(dim=-1, keepdim=True))
         del v_texture
         slots_texture = self.fc2_slots_texture(F.relu(self.fc1_slots_texture(self.norm_pre_fc_slots_texture(slots_texture))))

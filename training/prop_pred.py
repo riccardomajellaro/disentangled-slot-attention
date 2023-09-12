@@ -22,10 +22,11 @@ parser.add_argument("--config", default=None, type=str, help="Name of the config
 parser.add_argument("--inverse", action="store_true", help="True for inverse property prediction task, False for regular.")
 parser.add_argument("--no_wandb", action="store_true")
 parser.add_argument("--disa_ckpt", default=None, type=str, help="Name of the DISA checkpoint to load (without .ckpt).")
-parser.add_argument("--disa_ckpt_path", default="checkpoints/tetrominoes/", type=str, help="Path where you want to save the model." )
-parser.add_argument("--proppred_ckpt_path", default="checkpoints/tetrominoes/", type=str, help="Path where DISA is stored.")
+parser.add_argument("--disa_ckpt_path", default="checkpoints/tetrominoes/", type=str, help="Path where DISA is stored.")
+parser.add_argument("--proppred_ckpt_path", default="checkpoints/tetrominoes/", type=str, help="Path where you want to save the property prediction model.")
 parser.add_argument("--ckpt_name", default="model", type=str, help="Name of the saved checkpoint. Set to --config if --config is not None.")
 parser.add_argument("--data_path", default="tetrominoes/", type=str, help="Path to the data.")
+parser.add_argument("--dataset", default="tetrominoes", type=str, help="Name of the dataset to use (tetrominoes, multidsprites, clevr).")
 parser.add_argument("--resolution", default=[35, 35], type=list)
 parser.add_argument("--batch_size", default=64, type=int)
 parser.add_argument("--crop", action="store_true")
@@ -94,12 +95,14 @@ optimizer = optim.Adam(params, lr=args["learning_rate"])
 # load train set
 dataset = Dataset(args["dataset"], args["data_path"], "train",
                     noise=False, crop=args["crop"], resize=args["resize"], proppred=True)
-dataloader = torch.utils.data.DataLoader(dataset, batch_size=args["batch_size"], shuffle=True, num_workers=args["num_workers"])
+dataloader = torch.utils.data.DataLoader(dataset, batch_size=args["batch_size"],
+                                         shuffle=True, num_workers=args["num_workers"])
 
 # load val set
 dataset_val = Dataset(args["dataset"], args["data_path"], "val",
                     noise=False, crop=args["crop"], resize=args["resize"], proppred=True)
-dataloader_val = torch.utils.data.DataLoader(dataset_val, batch_size=args["batch_size"], shuffle=True, num_workers=args["num_workers"])
+dataloader_val = torch.utils.data.DataLoader(dataset_val, batch_size=args["batch_size"],
+                                             shuffle=True, num_workers=args["num_workers"])
 
 start = time.time()
 epoch, i = 0, 0
@@ -148,8 +151,8 @@ for epoch in range(args["num_epochs"]):
             for sample in dataloader_val:
                 with torch.no_grad():
                     pred_shapes, pred_colors, pred_materials, shapes, colors, materials = predict_properties(
-                                                            encoder, prop_clf, sample, args["dataset"], args["num_slots"],
-                                                            args["slots_dim"], args["inverse"], prop_conf, device)
+                                                        encoder, prop_clf, sample, args["dataset"], args["num_slots"],
+                                                        args["slots_dim"], args["inverse"], prop_conf, device)
                 # compute validation losses
                 shape_loss = criterion_ce(pred_shapes, shapes)
                 val_loss[0] += shape_loss
@@ -181,10 +184,10 @@ for epoch in range(args["num_epochs"]):
         + f"Time: {datetime.timedelta(seconds=time.time() - start)}")
 
     if epoch % 5 == 0:
-        torch.save({
-            "model_state_dict": prop_clf.state_dict(),
-            }, args["proppred_ckpt_path"] + ("inv_" if args["inverse"] else "") + "proppred_" + args["ckpt_name"]+"_"+str(epoch)+"ep.ckpt")
+        torch.save({"model_state_dict": prop_clf.state_dict()},
+                    args["proppred_ckpt_path"] + ("inv_" if args["inverse"] else "") + \
+                    "proppred_" + args["ckpt_name"]+"_"+str(epoch)+"ep.ckpt")
 
-torch.save({
-    "model_state_dict": prop_clf.state_dict(),
-}, args["proppred_ckpt_path"] + ("inv_" if args["inverse"] else "") + "proppred_" + args["ckpt_name"]+"_"+str(epoch)+"ep.ckpt")
+torch.save({"model_state_dict": prop_clf.state_dict()},
+            args["proppred_ckpt_path"] + ("inv_" if args["inverse"] else "") + \
+            "proppred_" + args["ckpt_name"]+"_"+str(epoch)+"ep.ckpt")

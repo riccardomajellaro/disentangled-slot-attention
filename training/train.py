@@ -24,6 +24,7 @@ parser.add_argument("--init_ckpt", default=None, type=str, help="Name of the che
 parser.add_argument("--ckpt_path", default="checkpoints/tetrominoes/", type=str, help="Path where you want to save the model.")
 parser.add_argument("--ckpt_name", default="model", type=str, help="Name of the saved checkpoint. Set to --config if --config is not None.")
 parser.add_argument("--data_path", default="tetrominoes/", type=str, help="Path to the data.")
+parser.add_argument("--dataset", default="tetrominoes", type=str, help="Name of the dataset to use (tetrominoes, multidsprites, clevr).")
 parser.add_argument("--resolution", default=[35, 35], type=list)
 parser.add_argument("--batch_size", default=64, type=int)
 parser.add_argument("--var_reg", default=0.01, help="Strength of the variance regularization term. Set to None to turn it off.")

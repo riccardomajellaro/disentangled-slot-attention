@@ -1,4 +1,4 @@
-""" PyTorch implementation of Slot Attention from
+""" Based on the PyTorch implementation of Slot Attention from
     https://github.com/evelinehong/slot-attention-pytorch/blob/master/model.py
 """
 
@@ -70,7 +70,10 @@ class SlotAttention(nn.Module):
 
         return slots, attn_mask
 
+
 def build_grid(resolution):
+    """ Build 4d grid of specified resolution with ranges [0, 1].
+    """
     ranges = [np.linspace(0., 1., num=res) for res in resolution]
     grid = np.meshgrid(*ranges, sparse=False, indexing="ij")
     grid = np.stack(grid, axis=-1)
@@ -79,13 +82,10 @@ def build_grid(resolution):
     grid = grid.astype(np.float32)
     return torch.from_numpy(np.concatenate([grid, 1.0 - grid], axis=-1))
 
-"""Adds soft positional embedding with learnable projection."""
+
 class SoftPositionEmbed(nn.Module):
     def __init__(self, hidden_size, resolution):
-        """Builds the soft position embedding layer.
-        Args:
-        hidden_size: Size of input feature dimension.
-        resolution: Tuple of integers specifying width and height of grid.
+        """ Soft positional embedding layer.
         """
         super().__init__()
         self.embedding = nn.Linear(4, hidden_size, bias=True)
@@ -94,6 +94,7 @@ class SoftPositionEmbed(nn.Module):
     def forward(self, inputs):
         grid = self.embedding(self.grid)
         return inputs + grid
+
 
 class Encoder(nn.Module):
     def __init__(self, hid_dim, resolution):
@@ -117,6 +118,7 @@ class Encoder(nn.Module):
         x = self.encoder_pos(x)
         x = torch.flatten(x, 1, 2)
         return x
+
 
 class Decoder(nn.Module):
     def __init__(self, hid_dim, slots_dim, resolution, small_arch):
@@ -158,14 +160,11 @@ class Decoder(nn.Module):
         x = x.permute(0,2,3,1)
         return x
 
-"""Slot Attention-based auto-encoder for object discovery."""
+
 class SlotAttentionAutoEncoder(nn.Module):
     def __init__(self, resolution, num_slots, num_iterations, slots_dim, encdec_dim, small_arch, learned_slots=False):
-        """Builds the Slot Attention-based auto-encoder.
-        Args:
-        resolution: Tuple of integers specifying width and height of input image.
-        num_slots: Number of slots in Slot Attention.
-        num_iterations: Number of iterations in Slot Attention.
+        """ Slot Attention autoencoder. Based on the PyTorch implementation of Slot Attention from
+            https://github.com/evelinehong/slot-attention-pytorch/blob/master/model.py. 
         """
         super().__init__()
         self.slots_dim = slots_dim

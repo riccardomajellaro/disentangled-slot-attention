@@ -2,32 +2,10 @@ import numpy as np
 from torch import nn
 import torch
 import torch.nn.functional as F
-from torchvision import transforms
-
-
-class Sobel(nn.Module):
-    """ PyTorch implementation of the Sobel filter from
-        https://github.com/chaddy1004/sobel-operator-pytorch/tree/master/model.py.
-    """
-    def __init__(self):
-        super().__init__()
-        self.filter = nn.Conv2d(in_channels=1, out_channels=2, kernel_size=3, stride=1, padding=0, bias=False)
-        Gx = torch.tensor([[2.0, 0.0, -2.0], [4.0, 0.0, -4.0], [2.0, 0.0, -2.0]])
-        Gy = torch.tensor([[2.0, 4.0, 2.0], [0.0, 0.0, 0.0], [-2.0, -4.0, -2.0]])
-        G = torch.cat([Gx.unsqueeze(0), Gy.unsqueeze(0)], 0)
-        G = G.unsqueeze(1)
-        self.filter.weight = nn.Parameter(G, requires_grad=False)
-
-    def forward(self, img):
-        x = self.filter(img)
-        x = torch.mul(x, x)
-        x = torch.sum(x, dim=1, keepdim=True)
-        x = torch.sqrt(x + 1e-8)
-        return x
 
 
 class SlotAttention(nn.Module):
-    """ Slot Attention mechanism used to encode shape information.
+    """ Slot Attention mechanism.
     """
     def __init__(self, num_slots, iters, slots_dim, featvec_dim, hidden_dim, resolution, eps,
                  learned_slots, bilevel, learned_factors, scale_inv):
@@ -184,8 +162,8 @@ class SoftPositionEmbed(nn.Module):
         return inputs + grid
 
 
-class TextureEncoder(nn.Module):
-    """ CNN backbone used to encode texture-related feature vectors.
+class Encoder(nn.Module):
+    """ CNN backbone used to encode feature vectors.
     """
     def __init__(self, hid_dim, small_arch):
         super().__init__()
@@ -213,37 +191,8 @@ class TextureEncoder(nn.Module):
         return x
 
 
-class ShapeEncoder(nn.Module):
-    """ CNN backbone used to encode shape-related feature vectors.
-    """
-    def __init__(self, hid_dim, small_arch):
-        super().__init__()
-        if not small_arch:
-            self.conv1 = nn.Conv2d(1, hid_dim, 5, stride=(2, 2), padding = 2)
-            self.conv2 = nn.Conv2d(hid_dim, hid_dim, 5, stride=(1, 1), padding = 2)
-            self.conv3 = nn.Conv2d(hid_dim, hid_dim, 5, stride=(1, 1), padding = 2)
-            self.conv4 = nn.Conv2d(hid_dim, hid_dim, 5, stride=(1, 1), padding = 2)
-        else:
-            self.conv1 = nn.Conv2d(1, hid_dim, 5, padding = 2)
-            self.conv2 = nn.Conv2d(hid_dim, hid_dim, 5, padding = 2)
-            self.conv3 = nn.Conv2d(hid_dim, hid_dim, 5, padding = 2)
-            self.conv4 = nn.Conv2d(hid_dim, hid_dim, 5, padding = 2)
-
-    def forward(self, x):
-        x = self.conv1(x)
-        x = F.relu(x)
-        x = self.conv2(x)
-        x = F.relu(x)
-        x = self.conv3(x)
-        x = F.relu(x)
-        x = self.conv4(x)
-        x = F.relu(x)
-        x = x.permute(0,2,3,1).contiguous()
-        return x
-
-
-class TextureDecoder(nn.Module):
-    """ ConvTranspose2d layers used to decode the texture of an object based on its texture and shape information.
+class Decoder(nn.Module):
+    """ ConvTranspose2d layers used to decode an object based on its broadcasted slot.
     """
     def __init__(self, hid_dim, slots_dim, small_arch):
         super().__init__()
@@ -253,12 +202,12 @@ class TextureDecoder(nn.Module):
             self.conv3 = nn.ConvTranspose2d(hid_dim, hid_dim, 5, stride=(2, 2), padding=2, output_padding=1)
             self.conv4 = nn.ConvTranspose2d(hid_dim, hid_dim, 5, stride=(1, 1), padding=2)
             self.conv5 = nn.ConvTranspose2d(hid_dim, hid_dim, 5, stride=(1, 1), padding=2)
-            self.conv6 = nn.ConvTranspose2d(hid_dim, 3, 3, stride=(1, 1), padding=1)
+            self.conv6 = nn.ConvTranspose2d(hid_dim, 4, 3, stride=(1, 1), padding=1)
         else:
             self.conv1 = nn.ConvTranspose2d(slots_dim, hid_dim, 5, stride=(1, 1), padding=2)
             self.conv2 = nn.ConvTranspose2d(hid_dim, hid_dim, 5, stride=(1, 1), padding=2)
             self.conv3 = nn.ConvTranspose2d(hid_dim, hid_dim, 5, stride=(1, 1), padding=2)
-            self.conv4 = nn.ConvTranspose2d(hid_dim, 3, 3, stride=(1, 1), padding=1)
+            self.conv4 = nn.ConvTranspose2d(hid_dim, 4, 3, stride=(1, 1), padding=1)
         self.small_arch = small_arch
 
     def forward(self, x):
@@ -279,47 +228,10 @@ class TextureDecoder(nn.Module):
         return x
 
 
-class MaskDecoder(nn.Module):
-    """ ConvTranspose2d layers used to decode the mask of an object based on its shape information.
-    """
-    def __init__(self, hid_dim, slots_dim, small_arch):
-        super().__init__()
-        if not small_arch:
-            self.conv1 = nn.ConvTranspose2d(slots_dim, hid_dim, 5, stride=(2, 2), padding=2, output_padding=1)
-            self.conv2 = nn.ConvTranspose2d(hid_dim, hid_dim, 5, stride=(2, 2), padding=2, output_padding=1)
-            self.conv3 = nn.ConvTranspose2d(hid_dim, hid_dim, 5, stride=(2, 2), padding=2, output_padding=1)
-            self.conv4 = nn.ConvTranspose2d(hid_dim, hid_dim, 5, stride=(1, 1), padding=2)
-            self.conv5 = nn.ConvTranspose2d(hid_dim, hid_dim, 5, stride=(1, 1), padding=2)
-            self.conv6 = nn.ConvTranspose2d(hid_dim, 1, 3, stride=(1, 1), padding=1)
-        else:
-            self.conv1 = nn.ConvTranspose2d(slots_dim, hid_dim, 5, stride=(1, 1), padding=2)
-            self.conv2 = nn.ConvTranspose2d(hid_dim, hid_dim, 5, stride=(1, 1), padding=2)
-            self.conv3 = nn.ConvTranspose2d(hid_dim, hid_dim, 5, stride=(1, 1), padding=2)
-            self.conv4 = nn.ConvTranspose2d(hid_dim, 1, 3, stride=(1, 1), padding=1)
-        self.small_arch = small_arch
-
-    def forward(self, x):
-        x = x.permute(0,3,1,2).contiguous()
-        x = self.conv1(x)
-        x = F.relu(x)
-        x = self.conv2(x)
-        x = F.relu(x)
-        x = self.conv3(x)
-        x = F.relu(x)
-        x = self.conv4(x)
-        if not self.small_arch:
-            x = F.relu(x)
-            x = self.conv5(x)
-            x = F.relu(x)
-            x = self.conv6(x)
-        x = x.permute(0,2,3,1).contiguous()
-        return x
-
-
-class DISA(nn.Module):
+class ISA(nn.Module):
     def __init__(self, resolution, num_slots, num_iterations, slots_dim, encdec_dim, small_arch,
                  learned_slots=True, bilevel=True, learned_factors=True, scale_inv=True):
-        """ Disentangled Slot Attention autoencoder. Extention of the PyTorch-based Slot Attention implementation
+        """ Invariant Slot Attention autoencoder. Extention of the PyTorch-based Slot Attention implementation
             from https://github.com/evelinehong/slot-attention-pytorch/blob/master/model.py. 
         """
         super().__init__()
@@ -332,21 +244,10 @@ class DISA(nn.Module):
         self.small_arch = small_arch
         self.scale_inv = scale_inv
 
-        self.sobel_filter = Sobel()
-        self.upscale = transforms.Resize((resolution[0]*3, resolution[1]*3), antialias=None)
-        self.downscale = transforms.Resize(resolution, antialias=None)
+        self.enc = Encoder(self.encdec_dim, self.small_arch)
+        self.dec = Decoder(self.encdec_dim, self.slots_dim, self.small_arch)
 
-        self.texture_enc = TextureEncoder(self.encdec_dim, small_arch)
-        self.shape_enc = ShapeEncoder(self.encdec_dim, small_arch)
-        self.texture_dec = TextureDecoder(self.encdec_dim, 2*self.slots_dim, small_arch)
-        self.mask_dec = MaskDecoder(self.encdec_dim, self.slots_dim, small_arch)
-
-        self.enc_pos_emb = SoftPositionEmbed(self.slots_dim, self.enc_resolution)
-        self.dec_pos_emb = SoftPositionEmbed(2*self.slots_dim, self.dec_resolution)
-
-        self.fc1 = nn.Linear(self.slots_dim, self.slots_dim)
-        self.fc2 = nn.Linear(self.slots_dim, self.slots_dim)
-        self.norm_pre_fc = nn.LayerNorm(self.slots_dim)
+        self.dec_pos_emb = SoftPositionEmbed(self.slots_dim, self.dec_resolution)
         
         self.slot_attention = SlotAttention(
             num_slots=self.num_slots,
@@ -360,47 +261,6 @@ class DISA(nn.Module):
             bilevel=bilevel,
             learned_factors=learned_factors,
             scale_inv=self.scale_inv)
-        
-        self.to_v_texture = nn.Linear(encdec_dim, self.slots_dim)
-        self.norm_texture  = nn.LayerNorm(encdec_dim)
-        self.fc1_slots_texture = nn.Linear(self.slots_dim, 128)
-        self.fc2_slots_texture = nn.Linear(128, self.slots_dim)
-        self.norm_pre_fc_slots_texture = nn.LayerNorm(self.slots_dim)
-
-    def encode(self, image, num_slots, slots_noise):
-        # upscale image for a more precise edge detection
-        upscaled_img = self.upscale(image)
-        # collapse ch dim to batch dim before filtering (ch wise) to parallelize
-        edge_mask = self.sobel_filter(upscaled_img.reshape(-1, 1, *upscaled_img.shape[-2:]))
-        del upscaled_img
-        # separate ch dim from batch dim before taking the mean over the ch dim (unsqueeze to keep ch dim)
-        edge_mask = edge_mask.view(image.shape[0], 3, *edge_mask.shape[-2:]).mean(dim=1).unsqueeze(1)
-        # downscale to original shape
-        edge_mask = self.downscale(edge_mask)
-        # feed edge mask to shape-related CNN backbone
-        x_shape = self.shape_enc(edge_mask)
-        # feed shape feature vectors to SA module
-        slots_mask, s_pos, s_scale, attn_mask = self.slot_attention(x_shape, num_slots, slots_noise)
-        del x_shape
-
-        # feed image to texture-related CNN backbone
-        x_texture = self.texture_enc(image)
-        # project texture feature vectors as values
-        v_texture = self.to_v_texture(self.norm_texture(x_texture))
-        del x_texture
-        # repeat texture values for each slot, augment them with rel pos emb (from SA module), then process with MLP
-        v_texture = v_texture.unsqueeze(1).repeat((1, num_slots, 1, 1, 1))
-        v_texture = self.enc_pos_emb(v_texture, s_pos, s_scale).view(*v_texture.shape[:2], -1, v_texture.shape[-1])
-        v_texture = self.fc2(F.relu(self.fc1(self.norm_pre_fc(v_texture))))
-        # combine texture values according to attn mask from SA module (then process with MLP)
-        slots_texture = torch.einsum('bijd,bij->bid', v_texture, attn_mask / attn_mask.sum(dim=-1, keepdim=True))
-        del v_texture
-        slots_texture = self.fc2_slots_texture(F.relu(self.fc1_slots_texture(self.norm_pre_fc_slots_texture(slots_texture))))
-
-        # combine slots_texture and slots_mask into single representations
-        slots = torch.concat([slots_texture, slots_mask], dim=-1)
-
-        return slots, edge_mask, attn_mask, s_pos, s_scale
 
     def decode(self, slots, s_pos, s_scale):
         # broadcast slots to a 2D grid
@@ -411,19 +271,14 @@ class DISA(nn.Module):
         # collapse batch and slot dims
         slots_broadcast = slots_broadcast.view(-1, *slots_broadcast.shape[2:])
 
-        # feed broadcasted shape-related slots to mask decoder
-        masks_log = self.mask_dec(slots_broadcast[:, :, :, self.slots_dim:])
+        # feed broadcasted slots to decoder
+        x = self.dec(slots_broadcast)
         # undo combination of batch and slot dim
-        masks_log = masks_log.reshape(slots.shape[0], -1, masks_log.shape[1], masks_log.shape[2], 1)
+        x = x.reshape(slots.shape[0], -1, x.shape[1], x.shape[2], 4)
+        textures, masks = x.split([3, 1], dim=-1)
+        del x
         # normalize alpha masks over slot dim
-        masks = nn.Softmax(dim=1)(masks_log)
-        del masks_log
-
-        # feed broadcasted slots to texture decoder
-        textures = self.texture_dec(slots_broadcast).clip(0., 1.)
-        del slots_broadcast
-        # undo combination of batch and slot dim
-        textures = textures.reshape(slots.shape[0], -1, textures.shape[1], textures.shape[2], textures.shape[3])
+        masks = nn.Softmax(dim=1)(masks)
 
         # combine textures and masks to get final reconstruction
         reconstruction = torch.sum(textures * masks, dim=1)
@@ -435,7 +290,9 @@ class DISA(nn.Module):
         num_slots = self.num_slots if num_slots is None else num_slots
 
         # encode image into slots
-        slots, edge_mask, attn_mask, s_pos, s_scale = self.encode(image, num_slots, slots_noise)
+        x = self.enc(image)
+        slots, s_pos, s_scale, attn_mask = self.slot_attention(x, num_slots, slots_noise)
+        del x
 
         # decode slots into reconstruction
         reconstruction, textures, masks = self.decode(slots, s_pos, s_scale)
@@ -445,4 +302,4 @@ class DISA(nn.Module):
         if self.scale_inv:
             slots = torch.concat([slots, s_scale.squeeze(2).squeeze(2)], dim=-1)
 
-        return reconstruction, textures, masks, slots, edge_mask, attn_mask
+        return reconstruction, textures, masks, slots, attn_mask

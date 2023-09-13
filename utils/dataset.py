@@ -118,7 +118,7 @@ class Dataset(Dataset):
             crop_i, crop_j, _, _ = transforms.RandomCrop.get_params(image, output_size=(crop_size, crop_size))
             image = F.crop(image, crop_i, crop_j, crop_size, crop_size)
         if self.resize:
-            image = F.resize(image, self.res_size)
+            image = F.resize(image, self.res_size, antialias=None)
         sample["image"] = image
 
         # transform masks
@@ -129,7 +129,7 @@ class Dataset(Dataset):
             elif self.crop == "random":
                 masks = [F.crop(mask, crop_i, crop_j, crop_size, crop_size) for mask in masks]
             if self.resize:
-                masks = [F.resize(mask, self.res_size) for mask in masks]
+                masks = [F.resize(mask, self.res_size, antialias=None) for mask in masks]
             sample["mask"] = torch.stack(masks).type(image.dtype)
 
         return sample

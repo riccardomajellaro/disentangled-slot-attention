@@ -333,8 +333,8 @@ class DISA(nn.Module):
         self.scale_inv = scale_inv
 
         self.sobel_filter = Sobel()
-        self.upscale = transforms.Resize((resolution[0]*3, resolution[1]*3))
-        self.downscale = transforms.Resize(resolution)
+        self.upscale = transforms.Resize((resolution[0]*3, resolution[1]*3), antialias=None)
+        self.downscale = transforms.Resize(resolution, antialias=None)
 
         self.texture_enc = TextureEncoder(self.encdec_dim, small_arch)
         self.shape_enc = ShapeEncoder(self.encdec_dim, small_arch)

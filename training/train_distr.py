@@ -1,5 +1,6 @@
 from models.disa import *
 from models.sa import *
+from models.isa import *
 from utils.dataset import *
 from tqdm import tqdm
 from torch import nn
@@ -43,6 +44,14 @@ def train(gpu, args):
         ).to(gpu)
         model.encoder_cnn.encoder_pos.grid = model.encoder_cnn.encoder_pos.grid.to(gpu)
         model.decoder_cnn.decoder_pos.grid = model.decoder_cnn.decoder_pos.grid.to(gpu)
+    elif args["model"] == "isa":
+        model = ISA(
+            args["resolution"], args["num_slots"], args["num_iterations"], args["slots_dim"],
+            32 if args["small_arch"] else 64, args["small_arch"], args["learned_slots"],
+            args["bilevel"], args["learned_factors"], args["scale_inv"]
+        ).to(gpu)
+        model.slot_attention.pos_emb.grid = model.slot_attention.pos_emb.grid.to(gpu)
+        model.dec_pos_emb.grid = model.dec_pos_emb.grid.to(gpu)
     else:
         exit("Select a valid model")
 
@@ -107,9 +116,16 @@ def train(gpu, args):
                     slots_noise = 1 - (i / args["warmup_steps"])
                 else:
                     slots_noise = None
+                if args["var_reg"] is not None:
+                    if args["var_reg_warmup"]:
+                        varreg_scale = args["var_reg"]
+                    else:
+                        varreg_scale = 0
             else:
                 learning_rate = args["learning_rate"]
                 slots_noise = None
+                if args["var_reg"] is not None:
+                    varreg_scale = args["var_reg"]
 
             learning_rate = learning_rate * (args["decay_rate"] ** (
                 i / args["decay_steps"]))
@@ -121,6 +137,8 @@ def train(gpu, args):
             
             if args["model"] == "sa":
                 reconstruction, _, _, _, _ = model(image)
+            elif args["model"] == "isa":
+                reconstruction, _, _, _, _ = model(image, slots_noise=slots_noise)
             else:
                 reconstruction, _, _, slots, _, _ = model(image, slots_noise=slots_noise)
             del _
@@ -132,7 +150,12 @@ def train(gpu, args):
             del reconstruction
 
             if args["var_reg"] is not None:
-                loss = loss + args["var_reg"] * slots[:, :, :args["slots_dim"]].view(-1, args["slots_dim"]).var(0).sum()
+                var_mean_tex = slots[:, :, :args["slots_dim"]].view(-1, args["slots_dim"]).var(0).mean()
+                if args["var_reg_shape"]:
+                    var_mean_shape = slots[:, :, args["slots_dim"]:2*args["slots_dim"]].view(-1, args["slots_dim"]).var(0).mean()
+                else:
+                    var_mean_shape = 0
+                loss = loss + varreg_scale * (var_mean_tex + var_mean_shape)
 
             optimizer.zero_grad()
             loss.backward()
@@ -178,7 +201,9 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", default="tetrominoes", type=str, help="Name of the dataset to use (tetrominoes, multidsprites, clevr).")
     parser.add_argument("--resolution", default=[35, 35], type=list)
     parser.add_argument("--batch_size", default=64, type=int)
-    parser.add_argument("--var_reg", default=0.01, help="Strength of the variance regularization term. Set to None to turn it off.")
+    parser.add_argument("--var_reg", default=0.32, help="Strength of the variance regularization term. Set to None to turn it off.")
+    parser.add_argument("--var_reg_warmup", action="store_true", help="If true, use variance regularization during warmup stage.")
+    parser.add_argument("--var_reg_shape", action="store_true", help="If true, use variance regularization also on shape components.")
     parser.add_argument("--noise", action="store_true")
     parser.add_argument("--crop", action="store_true")
     parser.add_argument("--resize", action="store_true")

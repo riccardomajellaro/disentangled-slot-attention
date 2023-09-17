@@ -9,7 +9,7 @@ import torch.nn.functional as F
 
 
 class SlotAttention(nn.Module):
-    def __init__(self, num_slots, dim, encdec_dim, iters = 3, eps = 1e-8, hidden_dim = 128):
+    def __init__(self, num_slots, dim, encdec_dim, iters=3, eps=1e-8, hidden_dim=128):
         super().__init__()
         self.num_slots = num_slots
         self.iters = iters
@@ -36,7 +36,7 @@ class SlotAttention(nn.Module):
         self.norm_slots  = nn.LayerNorm(dim)
         self.norm_pre_ff = nn.LayerNorm(dim)
 
-    def forward(self, inputs, num_slots = None):
+    def forward(self, inputs, num_slots=None):
         b = inputs.shape[0]
         n_s = num_slots if num_slots is not None else self.num_slots
         
@@ -188,8 +188,9 @@ class SlotAttentionAutoEncoder(nn.Module):
             eps = 1e-8, 
             hidden_dim = 128)
 
-    def forward(self, image):
+    def forward(self, image, num_slots=None):
         # `image` has shape: [batch_size, num_channels, width, height].
+        num_slots = num_slots if num_slots is not None else self.num_slots
 
         # Convolutional encoder with position embedding.
         x = self.encoder_cnn(image)  # CNN Backbone.
@@ -200,7 +201,7 @@ class SlotAttentionAutoEncoder(nn.Module):
         # `x` has shape: [batch_size, width*height, input_size].
 
         # Slot Attention module.
-        slots, attn_mask = self.slot_attention(x)
+        slots, attn_mask = self.slot_attention(x, num_slots)
         # `slots` has shape: [batch_size, num_slots, slot_size].
 
         # """Broadcast slot features to a 2D grid and collapse slot dimension.""".

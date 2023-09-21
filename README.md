@@ -1,5 +1,7 @@
-# Disentangled Slot Attention
-Repository for Disentangled Slot Attention (DISA).
+# Disentangled Slot Attention (DISA)
+Repository containing the code for the paper "Explicitly Disentangled Representations in Object-Centric Learning".
+
+<img src="figures/disa_arch.png" alt="DISA-Architecture" width="800"/>
 <br><br>
 
 ## Prepare datasets

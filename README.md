@@ -32,7 +32,7 @@ python data/clevr6.py --clevr_path CLEVR_PATH --clevr6_path CLEVR6_PATH
 ## Train
 Before running the commands below, move to the DISA directory.
 ### Object discovery
-Use the commands below to train a model on the object discovery task. Replace ```CONFIG_NAME``` with the name of the desired configuration (configs/objdisc_configs.json) to run.
+Use the command below to train a model on the object discovery task. Replace ```CONFIG_NAME``` with the name of the desired configuration (configs/objdisc_configs.json) to run.
 ```bash
 python -m training.train --config CONFIG_NAME
 ```
@@ -42,4 +42,20 @@ If you need to use Distributed Data Parallel (DDP), replace ```training.train```
 Use the command below to run the property prediction task. Replace ```CONFIG_NAME``` with the name of the desired configuration (configs/proppred_configs.json) to run.
 ```bash
 python -m training.prop_pred --config CONFIG_NAME
+```
+<br>
+
+## Evaluate
+Before running the commands below, move to the DISA directory.
+### Object discovery
+Use the command below to evaluate a model on the object discovery task (BG-ARI, FG-ARI, MSE). Replace ```CONFIG_NAME``` with the name of the desired configuration (configs/objdisc_configs.json) to run, and ```CKPT_NAME``` with the name of the checkpoint to load (without .ckpt at the end).
+```bash
+python -m evaluation.obj_disc --config CONFIG_NAME --init_ckpt --CKPT_NAME
+```
+If you evaluate a model that samples initial slots and/or position/scale embeddings, add the key ```reps``` and set it to, e.g., 10 in order to evaluate each image in the test set 10 times.
+
+### Property prediction
+Use the command below to evaluate a configuration on the property prediction task. Replace ```CONFIG_NAME``` with the name of the desired configuration (configs/proppred_configs.json) to run.
+```bash
+python -m evaluation.prop_pred --config CONFIG_NAME
 ```

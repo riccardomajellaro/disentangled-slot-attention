@@ -106,7 +106,7 @@ criterion = nn.MSELoss()
 params = [{"params": model.parameters()}]
 
 if not args["no_wandb"]:
-    wandb.init(project="DISA", entity="riccardomajellaro")
+    wandb.init(project="DISA", entity="insert-your-username")
     wandb.run.name = args["config"]
     logs = {}
     for key, value in args.items():

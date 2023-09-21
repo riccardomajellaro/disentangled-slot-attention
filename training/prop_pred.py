@@ -80,7 +80,7 @@ if args["dataset"] == "multidsprites":
     criterion_mse = nn.MSELoss()
 
 if not args["no_wandb"]:
-    wandb.init(project="DISA", entity="riccardomajellaro")
+    wandb.init(project="DISA", entity="insert-your-username")
     wandb.run.name = "proppred_" + args["config"]
     if args["inverse"]:
         wandb.run.name = "inv_" + wandb.run.name

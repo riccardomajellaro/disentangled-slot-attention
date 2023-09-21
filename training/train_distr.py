@@ -81,7 +81,7 @@ def train(gpu, args):
 
     if not args["no_wandb"]:
         os.environ["WANDB_RUN_GROUP"] = args["config"] + "-" + args["wandb_group_id"]
-        wandb.init(project="DISA", entity="riccardomajellaro", group=args["config"])
+        wandb.init(project="DISA", entity="insert-your-username", group=args["config"])
         wandb.run.name = args["config"] + "_" + str(gpu)
         logs = {}
         for key, value in args.items():

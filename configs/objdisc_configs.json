@@ -34,7 +34,7 @@
         "bilevel": true,
         "slots_noise": true,
         "learned_factors": false,
-        "scale_inv": true,
+        "scale_inv": false,
         "crop": false,
         "resize": false,
         "noise": false,

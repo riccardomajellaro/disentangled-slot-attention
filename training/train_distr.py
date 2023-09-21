@@ -237,6 +237,8 @@ if __name__ == "__main__":
             except KeyError:
                 exit(f"{key} is not a valid parameter")
 
+    args["batch_size"] = round(args["batch_size"] / args["num_gpus"])
+
     if not os.path.exists(args["ckpt_path"]):
         os.makedirs(args["ckpt_path"])
 

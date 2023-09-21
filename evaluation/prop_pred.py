@@ -2,6 +2,8 @@ from models.prop_pred import *
 from models.disa import *
 from utils.prop_pred import *
 from utils.dataset import *
+from os.path import exists
+from os import makedirs
 from tqdm import tqdm
 import torch
 import argparse
@@ -109,6 +111,8 @@ for _ in range(reps):
 accuracies_shapes = torch.tensor(accuracies_shapes)
 scores_colors = torch.tensor(scores_colors)
 accuracies_materials = torch.tensor(accuracies_materials)
+if not exists("results/"):
+    makedirs("results")
 with open("results/prop_pred.txt", "a") as results_f:
     res_shapes = "[Shape] Accuracy:   " + str(round(accuracies_shapes.mean().item() * 100, 2)) + " % +- " + str(round(accuracies_shapes.std().item() * 100, 2))
     if args["dataset"] == "multidsprites":

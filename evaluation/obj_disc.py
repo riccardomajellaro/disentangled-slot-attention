@@ -1,6 +1,8 @@
 from models.disa import *
 from utils.dataset import *
 from sklearn.metrics.cluster import adjusted_rand_score
+from os.path import exists
+from os import makedirs
 from tqdm import tqdm
 from torch import nn
 import torch
@@ -127,7 +129,8 @@ for sample in tqdm(dataloader, position=0):
 mse /= len(dataloader)
 ari_bg /= len(dataloader)
 ari_fg /= len(dataloader)
-
+if not exists("results/"):
+    makedirs("results")
 with open("results/obj_disc.txt", "a") as results_f:
     res_mse = "MSE:   " + str(round(mse, 5))
     res_bg = "BG ARI:   " + str(round(ari_bg * 100, 2))

@@ -32,7 +32,7 @@ python data/clevr6.py --clevr_path CLEVR_PATH --clevr6_path CLEVR6_PATH
 <br>
 
 ## Train
-Before running the commands below, move to the DISA directory.
+Before running the commands below, move to the DISA directory. In addition, set the key ```data_path``` of the configurations in configs/objdisc_configs.json and configs/proppred_configs.json to the paths to the related datasets.
 ### Object discovery
 Use the command below to train a model on the object discovery task. Replace ```CONFIG_NAME``` with the name of the desired configuration (configs/objdisc_configs.json) to run.
 ```bash

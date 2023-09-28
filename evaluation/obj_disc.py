@@ -10,31 +10,26 @@ import argparse
 import json
 
 
-def average_ari(masks, masks_gt, foreground_only=False):
+def average_ari(pred_masks, target_masks, foreground_only=False):
     ari = []
-    # Loop over elements in batch
-    for i in range(masks.shape[0]):
-        m = masks[i]
-        target_masks = masks_gt[i]
-        if target_masks.shape[0] < m.shape[0]:
-            num_extra_target_masks = m.shape[0] - target_masks.shape[0]
-            new_target_masks = target_masks[-1].repeat(num_extra_target_masks,1,1,1)
-            target_masks = torch.cat((target_masks, new_target_masks), dim=0) #+ 1e-8
-        m = m.cpu().numpy().flatten()
-        target_masks = target_masks.cpu().numpy().flatten()
+    for i in range(pred_masks.shape[0]):
+        pm = pred_masks[i]
+        tm = target_masks[i]
+        pm = pm.cpu().numpy().flatten()
+        tm = tm.cpu().numpy().flatten()
         if foreground_only:
-            m = m[np.where(target_masks > 0)]
-            target_masks = target_masks[np.where(target_masks > 0)]
+            pm = pm[np.where(tm > 0)]
+            tm = tm[np.where(tm > 0)]
         
-        score = adjusted_rand_score(m, target_masks)
+        score = adjusted_rand_score(pm, tm)
         ari.append(score)
-    return sum(ari) / masks.shape[0]
+    return sum(ari) / pred_masks.shape[0]
 
 def ari_score(pred_masks, target_masks):
-    masks = pred_masks.detach().argmax(dim=1)
-    gt_masks = target_masks.detach().argmax(dim=1)
-    ari_bg = average_ari(masks, gt_masks)
-    ari_fg = average_ari(masks, gt_masks, True)
+    pred_masks = pred_masks.detach().argmax(dim=1)
+    target_masks = target_masks.detach().argmax(dim=1)
+    ari_bg = average_ari(pred_masks, target_masks)
+    ari_fg = average_ari(pred_masks, target_masks, True)
     return ari_bg, ari_fg
 
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
@@ -91,6 +86,15 @@ elif args["model"] == "sa":
     ).to(device)
     model.encoder_cnn.encoder_pos.grid = model.encoder_cnn.encoder_pos.grid.to(device)
     model.decoder_cnn.decoder_pos.grid = model.decoder_cnn.decoder_pos.grid.to(device)
+elif args["model"] == "isa":
+    from models.isa import *
+    model = ISA(
+        args["resolution"], args["num_slots"], args["num_iterations"], args["slots_dim"],
+        32 if args["small_arch"] else 64, args["small_arch"], args["learned_slots"],
+        args["bilevel"], args["learned_factors"], args["scale_inv"]
+    ).to(device)
+    model.slot_attention.pos_emb.grid = model.slot_attention.pos_emb.grid.to(device)
+    model.dec_pos_emb.grid = model.dec_pos_emb.grid.to(device)
 else:
     exit("Select a valid model")
 
@@ -112,10 +116,6 @@ for sample in tqdm(dataloader, position=0):
     tmp_mse, tmp_ari_bg, tmp_ari_fg = 0, 0, 0
     for _ in range(args["reps"]):
         with torch.no_grad():
-            if args["model"] == "sa":
-                reconstruction, _, pred_masks, _, _ = model(image)
-            else:
-                reconstruction, _, pred_masks, _, _, _ = model(image)
             pred_image, _, pred_masks = model(image)[:3]
 
         tmp_mse += criterion(pred_image, image).item()

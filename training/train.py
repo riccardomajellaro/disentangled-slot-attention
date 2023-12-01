@@ -1,4 +1,5 @@
 from utils.dataset import *
+from utils.clevrtex_eval import CLEVRTEX
 from os.path import exists
 from os import makedirs
 from tqdm import tqdm
@@ -12,7 +13,7 @@ import time
 import json
 
 
-device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print("Running on", device)
 
 parser = argparse.ArgumentParser()
@@ -24,7 +25,7 @@ parser.add_argument("--init_ckpt", default=None, type=str, help="Name of the che
 parser.add_argument("--ckpt_path", default="checkpoints/tetrominoes/", type=str, help="Path where you want to save the model.")
 parser.add_argument("--ckpt_name", default="model", type=str, help="Name of the saved checkpoint. Set to --config if --config is not None.")
 parser.add_argument("--data_path", default="tetrominoes/", type=str, help="Path to the data.")
-parser.add_argument("--dataset", default="tetrominoes", type=str, help="Name of the dataset to use (tetrominoes, multidsprites, clevr).")
+parser.add_argument("--dataset", default="tetrominoes", type=str, help="Name of the dataset to use (tetrominoes, multidsprites, clevr, clevrtex).")
 parser.add_argument("--resolution", default=[35, 35], type=list)
 parser.add_argument("--batch_size", default=64, type=int)
 parser.add_argument("--var_reg", default=0.32, help="Strength of the variance regularization term. Set to None to turn it off.")
@@ -114,15 +115,25 @@ if not args["no_wandb"]:
     wandb.config = logs
     wandb.watch(model)
 
-train_set = Dataset(args["dataset"], args["data_path"], "train",
-                    noise=args["noise"], crop=args["crop"], resize=args["resize"], proppred=False)
+if args["dataset"] == "clevrtex":
+    train_set = CLEVRTEX(
+        args["data_path"],
+        dataset_variant="full", # 'full' for main CLEVRTEX, 'outd' for OOD, 'pbg','vbg','grassbg','camo' for variants.
+        split="train",
+        crop=True,
+        resize=(128, 128),
+        return_metadata=False # Useful only for evaluation, wastes time on I/O otherwise 
+    )
+else:
+    train_set = Dataset(args["dataset"], args["data_path"], "train",
+                        noise=args["noise"], crop=args["crop"], resize=args["resize"], proppred=False)
 train_dataloader = torch.utils.data.DataLoader(train_set, batch_size=args["batch_size"],
                                                 shuffle=True, num_workers=args["num_workers"])
 
 optimizer = optim.Adam(params, lr=args["learning_rate"])
 
 if args["init_ckpt"] is not None:
-    optimizer.load_state_dict(checkpoint["optim_state_dict"], strict=False)
+    optimizer.load_state_dict(checkpoint["optim_state_dict"])
 
 start = time.time()
 if args["init_ckpt"] is not None:
@@ -159,7 +170,10 @@ for epoch in range(epoch, args["num_epochs"]):
 
         optimizer.param_groups[0]["lr"] = learning_rate
         
-        image = sample["image"].to(device)
+        if args["dataset"] == "clevrtex":
+            image = sample[1].to(device)
+        else:
+            image = sample["image"].to(device)
         del sample
         
         if args["model"] == "sa":

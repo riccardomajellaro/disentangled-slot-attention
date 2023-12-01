@@ -6,9 +6,11 @@ class PropertyClf(nn.Module):
     def __init__(self, texture_dim=32, shape_dim=32, color_out_dim=6, material_out_dim=None, shape_out_dim=19):
         super().__init__()
         self.texture_dim = texture_dim
+        self.color_out_dim = color_out_dim
         self.material_out_dim = material_out_dim
-        self.color_hidden = nn.Linear(texture_dim, 256)
-        self.color_out = nn.Linear(256, color_out_dim)
+        if color_out_dim is not None:
+            self.color_hidden = nn.Linear(texture_dim, 256)
+            self.color_out = nn.Linear(256, color_out_dim)
         if material_out_dim is not None:
             self.material_hidden = nn.Linear(texture_dim, 256)
             self.material_out = nn.Linear(256, material_out_dim)
@@ -28,7 +30,8 @@ class PropertyClf(nn.Module):
             x_shape_ = x_shape
 
         out = {}
-        out["color"] = self.color_out(F.leaky_relu(self.color_hidden(x_texture_))).view(batch_size, num_slots, -1)
+        if self.color_out_dim is not None:
+            out["color"] = self.color_out(F.leaky_relu(self.color_hidden(x_texture_))).view(batch_size, num_slots, -1)
         if self.material_out_dim is not None:
             out["material"] = self.material_out(F.leaky_relu(self.material_hidden(x_texture_))).view(batch_size, num_slots, -1)
         out["shape"] = self.shape_out(F.leaky_relu(self.shape_hidden(x_shape_))).view(batch_size, num_slots, -1)

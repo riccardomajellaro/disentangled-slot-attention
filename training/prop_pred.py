@@ -2,6 +2,7 @@ from models.prop_pred import *
 from models.disa import *
 from utils.prop_pred import *
 from utils.dataset import *
+from utils.clevrtex_eval import CLEVRTEX
 from tqdm import tqdm
 from torch import nn
 import torch.optim as optim
@@ -26,7 +27,7 @@ parser.add_argument("--disa_ckpt_path", default="checkpoints/tetrominoes/", type
 parser.add_argument("--proppred_ckpt_path", default="checkpoints/tetrominoes/", type=str, help="Path where you want to save the property prediction model.")
 parser.add_argument("--ckpt_name", default="model", type=str, help="Name of the saved checkpoint. Set to --config if --config is not None.")
 parser.add_argument("--data_path", default="tetrominoes/", type=str, help="Path to the data.")
-parser.add_argument("--dataset", default="tetrominoes", type=str, help="Name of the dataset to use (tetrominoes, multidsprites, clevr).")
+parser.add_argument("--dataset", default="tetrominoes", type=str, help="Name of the dataset to use (tetrominoes, multidsprites, clevr, clevrtex).")
 parser.add_argument("--resolution", default=[35, 35], type=list)
 parser.add_argument("--batch_size", default=64, type=int)
 parser.add_argument("--crop", action="store_true")
@@ -92,15 +93,33 @@ if not args["no_wandb"]:
 
 optimizer = optim.Adam(params, lr=args["learning_rate"])
 
-# load train set
-dataset = Dataset(args["dataset"], args["data_path"], "train",
-                    noise=False, crop=args["crop"], resize=args["resize"], proppred=True)
+# load train and val set
+if args["dataset"] == "clevrtex":
+    dataset = CLEVRTEX(
+        args["data_path"],
+        dataset_variant="full", # 'full' for main CLEVRTEX, 'outd' for OOD, 'pbg','vbg','grassbg','camo' for variants.
+        split="train",
+        crop=True,
+        resize=(128, 128),
+        return_metadata=False # Useful only for evaluation, wastes time on I/O otherwise 
+    )
+    dataset_val = CLEVRTEX(
+        args["data_path"],
+        dataset_variant="full", # 'full' for main CLEVRTEX, 'outd' for OOD, 'pbg','vbg','grassbg','camo' for variants.
+        split="val",
+        crop=True,
+        resize=(128, 128),
+        return_metadata=False # Useful only for evaluation, wastes time on I/O otherwise 
+    )
+    clevrtex_shapes = torch.from_numpy(np.load(args["data_path"] + "shapes.npy"))
+    clevrtex_materials = torch.from_numpy(np.load(args["data_path"] + "materials.npy"))
+else:
+    dataset = Dataset(args["dataset"], args["data_path"], "train",
+                        noise=False, crop=args["crop"], resize=args["resize"], proppred=True)
+    dataset_val = Dataset(args["dataset"], args["data_path"], "val",
+                        noise=False, crop=args["crop"], resize=args["resize"], proppred=True)
 dataloader = torch.utils.data.DataLoader(dataset, batch_size=args["batch_size"],
                                          shuffle=True, num_workers=args["num_workers"])
-
-# load val set
-dataset_val = Dataset(args["dataset"], args["data_path"], "val",
-                    noise=False, crop=args["crop"], resize=args["resize"], proppred=True)
 dataloader_val = torch.utils.data.DataLoader(dataset_val, batch_size=args["batch_size"],
                                              shuffle=True, num_workers=args["num_workers"])
 
@@ -109,12 +128,17 @@ epoch, i = 0, 0
 prop_clf.train()
 encoder.eval()
 for epoch in range(args["num_epochs"]):
-    total_color_loss, total_shape_loss = 0, 0
+    total_shape_loss = 0
+    if prop_conf["color_out_dim"] is not None:
+        total_color_loss = 0
     if prop_conf["material_out_dim"] is not None:
         total_material_loss = 0
 
     for sample in tqdm(dataloader, position=0):
         i += 1
+
+        if args["dataset"] == "clevrtex":
+            sample = to_dict(sample, clevrtex_shapes, clevrtex_materials)
 
         pred_shapes, pred_colors, pred_materials, shapes, colors, materials = predict_properties(
                                                 encoder, prop_clf, sample, args["dataset"], args["num_slots"],
@@ -122,22 +146,27 @@ for epoch in range(args["num_epochs"]):
 
         # compute losses
         shape_loss = criterion_ce(pred_shapes, shapes)
-        if args["dataset"] == "multidsprites":
-            color_loss = criterion_mse(pred_colors, colors)
-        else:
-            color_loss = criterion_ce(pred_colors, colors)
-        loss = shape_loss + color_loss
+        loss = shape_loss
+        if prop_conf["color_out_dim"] is not None:
+            if args["dataset"] == "multidsprites":
+                color_loss = criterion_mse(pred_colors, colors)
+            else:
+                color_loss = criterion_ce(pred_colors, colors)
+            loss += color_loss
         if prop_conf["material_out_dim"] is not None:
             material_loss = criterion_ce(pred_materials, materials)
             loss += material_loss
         if not args["no_wandb"]:
-            loss_dict = {"shape_loss": shape_loss, "color_loss": color_loss}
+            loss_dict = {"shape_loss": shape_loss}
+            if prop_conf["color_out_dim"] is not None:
+                loss_dict["color_loss"] = color_loss
             if prop_conf["material_out_dim"] is not None:
                 loss_dict["material_loss"] = material_loss
             wandb.log(loss_dict, step=i)
         
         total_shape_loss += shape_loss.item()
-        total_color_loss += color_loss.item()
+        if prop_conf["color_out_dim"] is not None:
+            total_color_loss += color_loss.item()
         if prop_conf["material_out_dim"] is not None:
             total_material_loss += material_loss.item()
 
@@ -149,6 +178,9 @@ for epoch in range(args["num_epochs"]):
             prop_clf.eval()
             val_loss = [0, 0, 0]
             for sample in dataloader_val:
+                if args["dataset"] == "clevrtex":
+                    sample = to_dict(sample, clevrtex_shapes, clevrtex_materials)
+                    
                 with torch.no_grad():
                     pred_shapes, pred_colors, pred_materials, shapes, colors, materials = predict_properties(
                                                         encoder, prop_clf, sample, args["dataset"], args["num_slots"],
@@ -156,11 +188,12 @@ for epoch in range(args["num_epochs"]):
                 # compute validation losses
                 shape_loss = criterion_ce(pred_shapes, shapes)
                 val_loss[0] += shape_loss
-                if args["dataset"] == "multidsprites":
-                    color_loss = criterion_mse(pred_colors, colors)
-                else:
-                    color_loss = criterion_ce(pred_colors, colors)
-                val_loss[1] += color_loss
+                if prop_conf["color_out_dim"] is not None:
+                    if args["dataset"] == "multidsprites":
+                        color_loss = criterion_mse(pred_colors, colors)
+                    else:
+                        color_loss = criterion_ce(pred_colors, colors)
+                    val_loss[1] += color_loss
                 if prop_conf["material_out_dim"] is not None:
                     material_loss = criterion_ce(pred_materials, materials)
                     val_loss[2] += material_loss
@@ -168,18 +201,22 @@ for epoch in range(args["num_epochs"]):
             val_loss[1] /= len(dataloader_val)
             val_loss[2] /= len(dataloader_val)
             if not args["no_wandb"]:
-                loss_dict = {"shape_loss_val": val_loss[0], "color_loss_val": val_loss[1]}
+                loss_dict = {"shape_loss_val": val_loss[0]}
+                if prop_conf["color_out_dim"] is not None:
+                    loss_dict["color_loss_val"] = val_loss[1]
                 if prop_conf["material_out_dim"] is not None:
                     loss_dict["material_loss_val"] = val_loss[2]
                 wandb.log(loss_dict, step=i) 
             prop_clf.train()
     
     total_shape_loss /= len(dataloader)
-    total_color_loss /= len(dataloader)
+    if prop_conf["color_out_dim"] is not None:
+        total_color_loss /= len(dataloader)
     if prop_conf["material_out_dim"] is not None:
         total_material_loss /= len(dataloader)
 
-    print(f"Epoch: {epoch}, Shape Loss: {total_shape_loss}, Color Loss: {total_color_loss},"
+    print(f"Epoch: {epoch}, Shape Loss: {total_shape_loss},"
+        + f"Color Loss: {total_color_loss}" if prop_conf["color_out_dim"] is not None else "" \
         + f"Material Loss: {total_material_loss}" if prop_conf["material_out_dim"] is not None else "" \
         + f"Time: {datetime.timedelta(seconds=time.time() - start)}")
 

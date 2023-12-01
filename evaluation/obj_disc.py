@@ -1,5 +1,6 @@
-from models.disa import *
 from utils.dataset import *
+from utils.prop_pred import to_dict
+from utils.clevrtex_eval import CLEVRTEX
 from sklearn.metrics.cluster import adjusted_rand_score
 from os.path import exists
 from os import makedirs
@@ -32,7 +33,7 @@ def ari_score(pred_masks, target_masks):
     ari_fg = average_ari(pred_masks, target_masks, True)
     return ari_bg, ari_fg
 
-device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print("Running on", device)
 
 parser = argparse.ArgumentParser()
@@ -42,7 +43,7 @@ parser.add_argument("--model", default="disa", type=str, help="Name of the model
 parser.add_argument("--init_ckpt", default=None, type=str, help="Name of the checkpoint to load (without .ckpt).")
 parser.add_argument("--ckpt_path", default="checkpoints/tetrominoes/", type=str, help="Path where the model is stored.")
 parser.add_argument("--data_path", default="tetrominoes/", type=str, help="Path to the data.")
-parser.add_argument("--dataset", default="tetrominoes", type=str, help="Name of the dataset to use (tetrominoes, multidsprites, clevr).")
+parser.add_argument("--dataset", default="tetrominoes", type=str, help="Name of the dataset to use (tetrominoes, multidsprites, clevr, clevrtex).")
 parser.add_argument("--resolution", default=[35, 35], type=list)
 parser.add_argument("--batch_size", default=64, type=int)
 parser.add_argument("--crop", action="store_true")
@@ -101,8 +102,18 @@ else:
 checkpoint = torch.load(args["ckpt_path"]+args["init_ckpt"]+".ckpt")
 model.load_state_dict(checkpoint["model_state_dict"])
 
-dataset = Dataset(args["dataset"], args["data_path"], "test",
-                    noise=False, crop=args["crop"], resize=args["resize"], proppred=False)
+if args["dataset"] == "clevrtex":
+    dataset = CLEVRTEX(
+        args["data_path"],
+        dataset_variant="full", # 'full' for main CLEVRTEX, 'outd' for OOD, 'pbg','vbg','grassbg','camo' for variants.
+        split="test",
+        crop=True,
+        resize=(128, 128),
+        return_metadata=False # Useful only for evaluation, wastes time on I/O otherwise 
+    )
+else:
+    dataset = Dataset(args["dataset"], args["data_path"], "test",
+                        noise=False, crop=args["crop"], resize=args["resize"], proppred=False)
 dataloader = torch.utils.data.DataLoader(dataset, batch_size=args["batch_size"], shuffle=False)
 
 criterion = nn.MSELoss()
@@ -110,6 +121,9 @@ criterion = nn.MSELoss()
 model.eval()
 mse, ari_bg, ari_fg = 0, 0, 0
 for sample in tqdm(dataloader, position=0):
+    if args["dataset"] == "clevrtex":
+        sample = to_dict(sample)
+        
     image = sample["image"].to(device)
     masks = sample["mask"].to(device)
 

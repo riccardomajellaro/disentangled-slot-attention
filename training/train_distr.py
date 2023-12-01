@@ -2,6 +2,7 @@ from models.disa import *
 from models.sa import *
 from models.isa import *
 from utils.dataset import *
+from utils.clevrtex_eval import CLEVRTEX
 from tqdm import tqdm
 from torch import nn
 import torch.multiprocessing as mp
@@ -89,8 +90,18 @@ def train(gpu, args):
         wandb.config = logs
         wandb.watch(model)
 
-    train_set = Dataset(args["dataset"], args["data_path"], "train",
-                        noise=args["noise"], crop=args["crop"], resize=args["resize"], proppred=False)
+    if args["dataset"] == "clevrtex":
+        train_set = CLEVRTEX(
+            args["data_path"],
+            dataset_variant="full", # 'full' for main CLEVRTEX, 'outd' for OOD, 'pbg','vbg','grassbg','camo' for variants.
+            split="train",
+            crop=True,
+            resize=(128, 128),
+            return_metadata=False # Useful only for evaluation, wastes time on I/O otherwise 
+        )
+    else:
+        train_set = Dataset(args["dataset"], args["data_path"], "train",
+                            noise=args["noise"], crop=args["crop"], resize=args["resize"], proppred=False)
     train_sampler = torch.utils.data.distributed.DistributedSampler(train_set, shuffle=True,
                                                                     num_replicas=args["world_size"], rank=gpu)
     train_dataloader = torch.utils.data.DataLoader(train_set, batch_size=args["batch_size"],
@@ -132,7 +143,10 @@ def train(gpu, args):
 
             optimizer.param_groups[0]['lr'] = learning_rate
             
-            image = sample["image"].to(gpu)
+            if args["dataset"] == "clevrtex":
+                image = sample[1].to(gpu)
+            else:
+                image = sample["image"].to(gpu)
             del sample
             
             if args["model"] == "sa":
@@ -198,7 +212,7 @@ if __name__ == "__main__":
     parser.add_argument("--ckpt_path", default="checkpoints/tetrominoes/", type=str, help="Path where you want to save the model.")
     parser.add_argument("--ckpt_name", default="model", type=str, help="Name of the saved checkpoint. Set to --config if --config is not None.")
     parser.add_argument("--data_path", default="tetrominoes/", type=str, help="Path to the data.")
-    parser.add_argument("--dataset", default="tetrominoes", type=str, help="Name of the dataset to use (tetrominoes, multidsprites, clevr).")
+    parser.add_argument("--dataset", default="tetrominoes", type=str, help="Name of the dataset to use (tetrominoes, multidsprites, clevr, clevrtex).")
     parser.add_argument("--resolution", default=[35, 35], type=list)
     parser.add_argument("--batch_size", default=64, type=int)
     parser.add_argument("--var_reg", default=0.32, help="Strength of the variance regularization term. Set to None to turn it off.")
